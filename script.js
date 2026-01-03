@@ -25,7 +25,9 @@ resizeCanvas(); // call once
 
 // Game State
 let frames = 0;
+let framesSinceLastPipe = 0;
 let score = 0;
+let level = 1;
 let highScore = localStorage.getItem('why_am_i_flying_highscore') || 0;
 let isGameRunning = false;
 let isGameOver = false;
@@ -57,13 +59,20 @@ for (let key in characters) {
 const charOptions = document.querySelectorAll('.char-option');
 
 charOptions.forEach(option => {
-    option.addEventListener('click', function (e) {
-        e.stopPropagation();
+    // Handle both click and touchstart
+    const selectChar = function (e) {
+        e.stopPropagation(); // Prevent game start
+
         charOptions.forEach(opt => opt.classList.remove('selected'));
-        this.classList.add('selected');
-        selectedCharKey = this.getAttribute('data-char');
+        // For the current element (this or e.currentTarget)
+        e.currentTarget.classList.add('selected');
+        selectedCharKey = e.currentTarget.getAttribute('data-char');
         updateCharDisplay();
-    });
+    };
+
+    option.addEventListener('click', selectChar);
+    option.addEventListener('touchstart', selectChar, { passive: false });
+    option.addEventListener('mousedown', (e) => e.stopPropagation()); // Stop mousedown bubbling to container
 });
 
 // Set default
@@ -101,26 +110,35 @@ function handleInput(e) {
 
     // Prevent default behavior to stop scrolling/zooming on mobile
     if (e.type === 'touchstart' || e.code === 'Space') {
-        // e.preventDefault(); // careful blocking scroll everywhere, but inside canvas ok
+        // e.preventDefault(); 
     }
 
-    if ((e.code === 'Space') || (e.type === 'touchstart')) {
+    if ((e.code === 'Space') || (e.type === 'touchstart') || (e.type === 'mousedown')) {
         startGame();
     }
 }
 
 document.addEventListener('keydown', handleInput);
 // Bind touch to canvas or container to avoid blocking UI clicks
-document.getElementById('game-container').addEventListener('touchstart', handleInput, { passive: false });
+const gameContainer = document.getElementById('game-container');
+gameContainer.addEventListener('touchstart', handleInput, { passive: false });
+gameContainer.addEventListener('mousedown', handleInput);
+
+const homeBtn = document.getElementById('home-btn');
 
 restartBtn.addEventListener('click', (e) => {
-    e.stopPropagation(); // prevent triggering flap immediately
+    e.stopPropagation();
+    // Instant Restart: Just start the game immediately
+    startGame();
+});
+
+homeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     resetGame();
-    startScreen.classList.add('active'); // Go back to start screen or just restart? 
-    // Usually restart goes straight to game, but let's go to start screen per request "like intro"
-    // Actually, "Press SPACE to Restart" usually means quick restart. 
-    // Let's reset to Start Screen so they can pick character again if they want.
+    // Go to Start Screen
+    startScreen.classList.add('active');
     gameOverScreen.classList.remove('active');
+    scoreContainer.style.display = 'none'; // Hide score on home
     isGameOver = false;
 });
 
@@ -133,21 +151,25 @@ const bird = {
     h: 40,
     radius: 15,
     speed: 0,
-    gravity: 0.25,
-    jump: 4.6,
-    rotation: 0,
+    gravity: 0.15, // Smoother gravity
+    jump: 3.5,     // Smoother jump
+    scaleX: 1,
+    scaleY: 1,
 
     draw: function () {
         const currentImg = characters[selectedCharKey].imgObj;
 
         ctx.save();
         ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
+
         // Rotate based on speed
-        // clamping rotation
         let rotation = this.speed * 0.1;
         if (rotation > 0.5) rotation = 0.5;
         if (rotation < -0.5) rotation = -0.5;
         ctx.rotate(rotation);
+
+        // Squash and Stretch
+        ctx.scale(this.scaleX, this.scaleY);
 
         if (currentImg.complete) {
             ctx.drawImage(currentImg, -this.w / 2, -this.h / 2, this.w, this.h);
@@ -164,6 +186,10 @@ const bird = {
         this.speed += this.gravity;
         this.y += this.speed;
 
+        // Elastic recovery for squash and stretch
+        this.scaleX += (1 - this.scaleX) * 0.1;
+        this.scaleY += (1 - this.scaleY) * 0.1;
+
         if (this.y + this.h > canvas.height) {
             this.y = canvas.height - this.h;
             gameOver();
@@ -177,10 +203,15 @@ const bird = {
 
     flap: function () {
         this.speed = -this.jump;
+
+        // Squash effect (Exaggerated)
+        this.scaleX = 1.3;
+        this.scaleY = 0.7;
+
         const soundMaster = characters[selectedCharKey].soundObj;
         if (soundMaster) {
             const sound = soundMaster.cloneNode();
-            sound.play().catch(e => { }); // ignore autowarn
+            sound.play().catch(e => { });
         }
     },
 
@@ -188,13 +219,15 @@ const bird = {
         this.y = 150;
         this.speed = 0;
         this.rotation = 0;
+        this.scaleX = 1;
+        this.scaleY = 1;
     }
 };
 
 const pipes = {
     position: [],
     w: 53,
-    gap: 150, // Increased gap
+    gap: 150,
     dx: 2,
 
     draw: function () {
@@ -204,10 +237,14 @@ const pipes = {
             let bottomPipeTop = p.y + this.gap;
 
             // Pipe Gradient
+            // Dynamic color based on score (rotate hue)
+            let hueShift = (score * 5) % 360;
+            let baseHue = 90 + hueShift;
+
             let gradient = ctx.createLinearGradient(p.x, 0, p.x + this.w, 0);
-            gradient.addColorStop(0, '#558c31');
-            gradient.addColorStop(0.5, '#73bf2e');
-            gradient.addColorStop(1, '#558c31');
+            gradient.addColorStop(0, `hsl(${baseHue}, 55%, 35%)`); // Darker edge
+            gradient.addColorStop(0.5, `hsl(${baseHue}, 65%, 50%)`); // Lighter center
+            gradient.addColorStop(1, `hsl(${baseHue}, 55%, 35%)`); // Darker edge
 
             ctx.fillStyle = gradient;
 
@@ -218,9 +255,9 @@ const pipes = {
             ctx.fillRect(p.x, bottomPipeTop, this.w, canvas.height - bottomPipeTop);
 
             // Caps (Rim)
-            ctx.fillStyle = '#558c31';
+            ctx.fillStyle = `hsl(${baseHue}, 65%, 45%)`;
             const capHeight = 20;
-            const capOverhang = 2; // makes cap slightly wider
+            const capOverhang = 2;
 
             // Top Cap
             ctx.fillRect(p.x - capOverhang, topPipeHeight - capHeight, this.w + (capOverhang * 2), capHeight);
@@ -228,18 +265,30 @@ const pipes = {
             ctx.fillRect(p.x - capOverhang, bottomPipeTop, this.w + (capOverhang * 2), capHeight);
 
             // Borders
-            ctx.strokeStyle = '#2d5c0e';
+            ctx.strokeStyle = `hsl(${baseHue}, 70%, 20%)`;
             ctx.lineWidth = 2;
 
-            // Draw borders if needed (optional for style)
             ctx.strokeRect(p.x - capOverhang, topPipeHeight - capHeight, this.w + (capOverhang * 2), capHeight);
             ctx.strokeRect(p.x - capOverhang, bottomPipeTop, this.w + (capOverhang * 2), capHeight);
         }
     },
 
     update: function () {
-        if (frames % 150 === 0) {
-            const minPipeLen = 80; // keep more texture
+        // Difficulty Scaling
+        let difficultyMultiplier = 1 + (score * 0.02);
+
+        // Cap difficulty
+        if (difficultyMultiplier > 2.5) difficultyMultiplier = 2.5;
+
+        this.dx = 2 * difficultyMultiplier;
+
+        // Let's just adjust based on multiplier.
+        // Reduced base interval from 150 to 110 for tighter gameplay
+        let spawnInterval = Math.floor(110 / difficultyMultiplier);
+
+        framesSinceLastPipe++;
+        if (framesSinceLastPipe > spawnInterval) {
+            const minPipeLen = 80;
             const maxPipeLen = canvas.height - this.gap - minPipeLen;
             const randomY = Math.floor(Math.random() * (maxPipeLen - minPipeLen + 1)) + minPipeLen;
 
@@ -247,6 +296,7 @@ const pipes = {
                 x: canvas.width,
                 y: randomY
             });
+            framesSinceLastPipe = 0;
         }
 
         for (let i = 0; i < this.position.length; i++) {
@@ -258,11 +308,23 @@ const pipes = {
                 score++;
                 scoreText.innerText = score;
                 i--;
+
+                // Level Up Logic
+                // Level up every 10 points
+                if (score > 0 && score % 10 === 0) {
+                    level++;
+                    const levelDisplay = document.getElementById('level-display');
+                    levelDisplay.innerText = "Level " + level;
+                    levelDisplay.classList.add('active');
+                    setTimeout(() => {
+                        levelDisplay.classList.remove('active');
+                    }, 1500);
+                }
             }
 
             // Collision
             let birdBounds = {
-                left: bird.x + 5, // hitbox adjustment
+                left: bird.x + 5,
                 right: bird.x + bird.w - 5,
                 top: bird.y + 5,
                 bottom: bird.y + bird.h - 5
@@ -303,19 +365,32 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
+
 function gameOver() {
     isGameRunning = false;
     isGameOver = true;
+
+    // Shake Effect
+    const gameContainer = document.getElementById('game-container');
+    gameContainer.classList.add('shake-effect');
+    setTimeout(() => {
+        gameContainer.classList.remove('shake-effect');
+    }, 500);
 
     // Update High Score
     if (score > highScore) {
         highScore = score;
         localStorage.setItem('why_am_i_flying_highscore', highScore);
+
+        bestScoreEl.classList.add('highscore-pulse');
+        bestScoreEl.innerText = highScore + " (NEW!)";
+    } else {
+        bestScoreEl.classList.remove('highscore-pulse');
+        bestScoreEl.innerText = highScore;
     }
 
     // Update UI
     finalScoreEl.innerText = score;
-    bestScoreEl.innerText = highScore;
 
     gameOverScreen.classList.add('active');
     scoreContainer.style.display = 'none';
@@ -325,15 +400,14 @@ function resetGame() {
     bird.reset();
     pipes.reset();
     score = 0;
+    level = 1;
     frames = 0;
+    framesSinceLastPipe = 0;
     scoreText.innerText = score;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw initial state (Bird hovering)
-    characters['nidha'].imgObj.onload = function () {
-        updateCharDisplay();
-        bird.draw();
-    }
+    // Initial Draw
+    updateCharDisplay();
     // Force draw if images already loaded
     if (characters[selectedCharKey].imgObj.complete) {
         bird.draw();

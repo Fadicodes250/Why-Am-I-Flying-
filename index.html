@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Why Am I Flying?</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+
+        <div id="score-container">
+            <img id="character-display" src="" alt="Character" style="display: none;">
+            <span id="score-text">0</span>
+        </div>
+
+        <div id="ui-layer">
+            <div id="start-screen" class="screen active">
+                <div class="title-container">
+                    <div id="title">Why Am I Flying?</div>
+                    <div class="subtitle">Select Your Hero</div>
+                </div>
+
+                <div id="character-selection">
+                    <div class="characters">
+                        <div class="char-option" data-char="nidha">
+                            <img src="nidha.png" alt="Nidha">
+                            <span>Nidha</span>
+                        </div>
+                        <div class="char-option" data-char="aami">
+                            <img src="aami.png" alt="Aami">
+                            <span>Aami</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="start-message" class="pulse">Tap or Press SPACE to Start</div>
+                <div class="credits">Made by Fadi</div>
+            </div>
+
+            <div id="game-over-screen" class="screen">
+                <div class="title-container">
+                    <div class="game-over-title">Game Over</div>
+                </div>
+                <div class="score-card">
+                    <div class="score-label">Score</div>
+                    <div id="final-score">0</div>
+                    <div class="score-label">Best</div>
+                    <div id="best-score">0</div>
+                </div>
+                <button id="restart-btn" class="action-btn">Play Again</button>
+            </div>
+
+            <div id="watermark">Made by Fadi</div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>
